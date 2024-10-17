@@ -51,6 +51,8 @@ public class MainActivity extends AppCompatActivity {
 
     int lock = 0;
 
+    boolean torch = false;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -201,10 +203,18 @@ public class MainActivity extends AppCompatActivity {
 
             OutputConfiguration config1 = new OutputConfiguration(previews[0].getHolder().getSurface());
             OutputConfiguration config2 = new OutputConfiguration(previews[1].getHolder().getSurface());
-            config1.setPhysicalCameraId(pid1);
-            config2.setPhysicalCameraId(pid2);
-
             ArrayList<OutputConfiguration> confs = new ArrayList<>();
+
+            if (pid1.isEmpty() && pid2.isEmpty())
+            {
+
+            }
+            else {
+                config1.setPhysicalCameraId(pid1);
+                config2.setPhysicalCameraId(pid2);
+
+            }
+
             confs.add(config1);
             confs.add(config2);
 
@@ -340,10 +350,58 @@ public class MainActivity extends AppCompatActivity {
     public void detect(View view)
     {
         try {
+            bruteforce();
             detectCameras();
         }
         catch (Exception e)
         {
+            e.printStackTrace();
+        }
+    }
+
+    public void bruteforce() throws CameraAccessException {
+        String result = "";
+
+        CameraManager manager = (CameraManager) getSystemService(CAMERA_SERVICE);
+
+        for (int i = 2;i <= 511;++i)
+        {
+            try {
+            CameraCharacteristics characteristics = manager.getCameraCharacteristics(Integer.toString(i));
+
+            result += "Found at lid " + i + ": ";
+
+            if (characteristics != null)
+            {
+                for (String pid : characteristics.getPhysicalCameraIds())
+                {
+                    result += pid + " ";
+                }
+
+                result += "\n";
+            }
+        }
+            catch (Exception e)
+            {
+                e.printStackTrace();
+            }
+        }
+
+
+        showDialog(result);
+    }
+
+    public void setTorchOn(View view)
+    {
+        String lid = logical_id_box.getText().toString();
+
+        CameraManager manager = (CameraManager) getSystemService(CAMERA_SERVICE);
+
+        try {
+            manager.setTorchMode(lid, !torch);
+            torch = !torch;
+        }
+        catch (Exception e) {
             e.printStackTrace();
         }
     }
