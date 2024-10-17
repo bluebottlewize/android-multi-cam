@@ -196,6 +196,7 @@ public class MainActivity extends AppCompatActivity {
                 }
             }, null);
         } catch (CameraAccessException e) {
+            showDialog(Arrays.toString(e.getStackTrace()));
             e.printStackTrace();
         }
     }
@@ -217,7 +218,6 @@ public class MainActivity extends AppCompatActivity {
             else {
                 config1.setPhysicalCameraId(pid1);
                 config2.setPhysicalCameraId(pid2);
-
             }
 
             confs.add(config1);
@@ -290,6 +290,7 @@ public class MainActivity extends AppCompatActivity {
 
             openCamera(logical_id, physical_id_1, physical_id_2);
         } catch (Exception e) {
+            showDialog(Arrays.toString(e.getStackTrace()));
             e.printStackTrace();
         }
     }
