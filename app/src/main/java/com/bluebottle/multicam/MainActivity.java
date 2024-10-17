@@ -10,15 +10,14 @@ import android.hardware.camera2.CameraCharacteristics;
 import android.hardware.camera2.CameraDevice;
 import android.hardware.camera2.CameraManager;
 import android.hardware.camera2.CameraMetadata;
+import android.hardware.camera2.CaptureFailure;
 import android.hardware.camera2.CaptureRequest;
 import android.hardware.camera2.TotalCaptureResult;
 import android.hardware.camera2.params.OutputConfiguration;
 import android.hardware.camera2.params.SessionConfiguration;
-import android.media.ImageReader;
 import android.os.Bundle;
 import android.util.Log;
 import android.util.Size;
-import android.view.Surface;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import android.view.View;
@@ -31,7 +30,6 @@ import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 
-import java.lang.reflect.Array;
 import java.util.ArrayList;
 import java.util.Arrays;
 
@@ -149,6 +147,8 @@ public class MainActivity extends AppCompatActivity {
             float ideal = (float) previews[0].getWidth() / previews[0].getHeight();
             Size best = new Size(500, 500);
 
+            String dimension = "";
+
             for (Size size : characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP).getOutputSizes(ImageFormat.PRIVATE)) {
                 float ratio = (float) size.getWidth() / size.getHeight();
 
@@ -158,10 +158,16 @@ public class MainActivity extends AppCompatActivity {
                 }
 
                 System.out.println("width " + size.getWidth() + " height " + size.getHeight());
+                dimension += "width " + size.getWidth() + " height " + size.getHeight() + "\n";
             }
+
+
             previews[0].getHolder().setFixedSize(best.getWidth(), best.getHeight());
             previews[1].getHolder().setFixedSize(best.getWidth(), best.getHeight());
 
+            dimension += "chose " + best.getWidth() + " " + best.getHeight() + "\n";
+
+            showDialog(dimension);
             // Create an ImageReader to handle the preview frames
             // ImageReader imageReader = ImageReader.newInstance(previewSize.getWidth(), previewSize.getWidth(), ImageFormat.YUV_420_888, 2);
 
@@ -175,6 +181,7 @@ public class MainActivity extends AppCompatActivity {
                 public void onOpened(@NonNull CameraDevice camera) {
                     Log.d(TAG, "Opened " + lid);
 
+                    showDialog("Opened id " + lid);
 
                     cameraDevice = camera;
                     createCameraPreviewSession(pid1, pid2);
@@ -237,12 +244,15 @@ public class MainActivity extends AppCompatActivity {
                         }
                     }));
         } catch (CameraAccessException e) {
+            showDialog(Arrays.toString(e.getStackTrace()));
             e.printStackTrace();
         }
     }
 
     private void updatePreview() {
+        showDialog("Success");
         if (cameraDevice == null) {
+            showDialog("Null");
             Log.e(TAG, "updatePreview: cameraDevices[id] is null");
             return;
         }
@@ -254,9 +264,28 @@ public class MainActivity extends AppCompatActivity {
                                                @NonNull CaptureRequest request,
                                                @NonNull TotalCaptureResult result) {
                     super.onCaptureCompleted(session, request, result);
+                    showDialog("working");
                 }
+
+                @Override
+                public void onCaptureFailed(CameraCaptureSession session, CaptureRequest request, CaptureFailure failure)
+                {
+                    super.onCaptureFailed(session, request, failure);
+
+                    showDialog("failed " + failure.getReason());
+                }
+
+                @Override
+                public void onCaptureStarted(CameraCaptureSession session, CaptureRequest request, long timestamp, long frameNumber)
+                {
+                    super.onCaptureStarted(session, request, timestamp, frameNumber);
+
+                    showDialog("started at " + timestamp);
+                }
+
             }, null);
         } catch (CameraAccessException e) {
+            showDialog(Arrays.toString(e.getStackTrace()));
             e.printStackTrace();
         }
     }
@@ -280,6 +309,7 @@ public class MainActivity extends AppCompatActivity {
             cameraDevice.close();
             cameraDevice.close();
         } catch (Exception e) {
+            // showDialog(Arrays.toString(e.getStackTrace()));
             e.printStackTrace();
         }
 
@@ -361,6 +391,7 @@ public class MainActivity extends AppCompatActivity {
         }
         catch (Exception e)
         {
+            showDialog(Arrays.toString(e.getStackTrace()));
             e.printStackTrace();
         }
     }
