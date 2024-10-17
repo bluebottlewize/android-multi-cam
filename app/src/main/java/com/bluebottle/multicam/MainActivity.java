@@ -134,8 +134,13 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
 
+            String cameraId = lid;
 
-            String cameraId = manager.getCameraIdList()[Integer.parseInt(lid)]; // Get the first camera
+            if (Integer.parseInt(lid) < manager.getCameraIdList().length)
+            {
+                cameraId = manager.getCameraIdList()[Integer.parseInt(lid)]; // Get the first camera
+            }
+
             CameraCharacteristics characteristics = manager.getCameraCharacteristics(cameraId);
             Size previewSize = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP).getOutputSizes(ImageFormat.PRIVATE)[9]; // Get a suitable preview size
 
