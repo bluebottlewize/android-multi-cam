@@ -1,6 +1,10 @@
 package com.bluebottle.multicam;
 
 import android.Manifest;
+import android.animation.Animator;
+import android.animation.AnimatorListenerAdapter;
+import android.animation.ObjectAnimator;
+import android.app.Dialog;
 import android.content.DialogInterface;
 import android.content.pm.PackageManager;
 import android.graphics.ImageFormat;
@@ -15,13 +19,27 @@ import android.hardware.camera2.CaptureRequest;
 import android.hardware.camera2.TotalCaptureResult;
 import android.hardware.camera2.params.OutputConfiguration;
 import android.hardware.camera2.params.SessionConfiguration;
+import android.media.ImageReader;
+import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.HandlerThread;
+import android.transition.Slide;
 import android.util.Log;
+import android.util.Range;
 import android.util.Size;
+import android.view.Surface;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import android.view.View;
+import android.view.Window;
+import android.widget.AdapterView;
+import android.widget.ArrayAdapter;
+import android.widget.AutoCompleteTextView;
+import android.widget.Button;
 import android.widget.EditText;
+import android.widget.ImageButton;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -30,31 +48,36 @@ import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 
+import com.google.android.material.slider.Slider;
+
 import java.util.ArrayList;
 import java.util.Arrays;
 
 public class MainActivity extends AppCompatActivity {
 
-    private static final String TAG = "CameraActivity";
     private static final int CAMERA_REQUEST_CODE = 100;
 
     private SurfaceView[] previews;
-    private CameraDevice cameraDevice;
-    private CameraCaptureSession cameraCaptureSession;
-    private CaptureRequest.Builder captureRequestBuilder;
-
-    EditText logical_id_box;
-    EditText physical_id_1_box;
-    EditText physical_id_2_box;
 
     int lock = 0;
 
-    boolean torch = false;
+    String lid;
+    String pid1, pid2;
+
+    MultiCam multiCam;
+
+    Runnable runnable;
+
+    boolean isSliderVisible = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+
+        if (getSupportActionBar() != null) {
+            getSupportActionBar().hide();
+        }
 
         previews = new SurfaceView[2];
 
@@ -62,10 +85,6 @@ public class MainActivity extends AppCompatActivity {
         SurfaceHolder holder1 = previews[0].getHolder();
         previews[1] = findViewById(R.id.preview2);
         SurfaceHolder holder2 = previews[1].getHolder();
-
-        logical_id_box = findViewById(R.id.logical_id);
-        physical_id_1_box = findViewById(R.id.physical_id_1);
-        physical_id_2_box = findViewById(R.id.physical_id_2);
 
         holder1.addCallback(new SurfaceHolder.Callback() {
             @Override
@@ -111,6 +130,7 @@ public class MainActivity extends AppCompatActivity {
 
         });
 
+        multiCam = new MultiCam(this, MultiCam.availableCameras(this).get(0), "", "", previews[0], previews[1]);
 
         // Request camera permissions
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
@@ -118,177 +138,6 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void openCamera(String lid, String pid1, String pid2) {
-        CameraManager manager = (CameraManager) getSystemService(CAMERA_SERVICE);
-
-
-        // System.out.println("COncurrent ides " + manager.getConcurrentCameraIds().size());
-        try {
-
-            for (String ide : manager.getCameraIdList()) {
-                CameraCharacteristics characteristicss = manager.getCameraCharacteristics(ide);
-                for (String phyid : characteristicss.getPhysicalCameraIds()) {
-                    System.out.print(phyid + " ");
-                }
-            }
-
-            String cameraId = lid;
-
-            if (Integer.parseInt(lid) < manager.getCameraIdList().length)
-            {
-                cameraId = manager.getCameraIdList()[Integer.parseInt(lid)]; // Get the first camera
-            }
-
-            CameraCharacteristics characteristics = manager.getCameraCharacteristics(cameraId);
-            Size previewSize = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP).getOutputSizes(ImageFormat.PRIVATE)[9]; // Get a suitable preview size
-
-
-            float deviation = Float.MAX_VALUE;
-            float ideal = (float) previews[0].getWidth() / previews[0].getHeight();
-            Size best = new Size(500, 500);
-
-            String dimension = "";
-
-            for (Size size : characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP).getOutputSizes(ImageFormat.PRIVATE)) {
-                float ratio = (float) size.getWidth() / size.getHeight();
-
-                if (Math.abs(ratio - ideal) < deviation) {
-                    deviation = Math.abs(ratio - ideal);
-                    best = size;
-                }
-
-                System.out.println("width " + size.getWidth() + " height " + size.getHeight());
-                dimension += "width " + size.getWidth() + " height " + size.getHeight() + "\n";
-            }
-
-
-            previews[0].getHolder().setFixedSize(best.getWidth(), best.getHeight());
-            previews[1].getHolder().setFixedSize(best.getWidth(), best.getHeight());
-
-            dimension += "chose " + best.getWidth() + " " + best.getHeight() + "\n";
-
-            showDialog(dimension);
-            // Create an ImageReader to handle the preview frames
-            // ImageReader imageReader = ImageReader.newInstance(previewSize.getWidth(), previewSize.getWidth(), ImageFormat.YUV_420_888, 2);
-
-            if (ActivityCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
-                return;
-            }
-
-            Log.d(TAG, "Trying to open camera" + lid);
-            manager.openCamera(cameraId, new CameraDevice.StateCallback() {
-                @Override
-                public void onOpened(@NonNull CameraDevice camera) {
-                    Log.d(TAG, "Opened " + lid);
-
-                    showDialog("Opened id " + lid);
-
-                    cameraDevice = camera;
-                    createCameraPreviewSession(pid1, pid2);
-                }
-
-                @Override
-                public void onDisconnected(@NonNull CameraDevice camera) {
-                    camera.close();
-                    cameraDevice = null;
-                }
-
-                @Override
-                public void onError(@NonNull CameraDevice camera, int error) {
-                    if (error == ERROR_MAX_CAMERAS_IN_USE) {
-                        Log.d(TAG, "cant open camera" + lid);
-                    }
-                    camera.close();
-                    cameraDevice = null;
-                }
-            }, null);
-        } catch (CameraAccessException e) {
-            showDialog(Arrays.toString(e.getStackTrace()));
-            e.printStackTrace();
-        }
-    }
-
-    private void createCameraPreviewSession(String pid1, String pid2) {
-        try {
-            captureRequestBuilder = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
-            captureRequestBuilder.addTarget(previews[0].getHolder().getSurface());
-            captureRequestBuilder.addTarget(previews[1].getHolder().getSurface());
-
-            OutputConfiguration config1 = new OutputConfiguration(previews[0].getHolder().getSurface());
-            OutputConfiguration config2 = new OutputConfiguration(previews[1].getHolder().getSurface());
-            ArrayList<OutputConfiguration> confs = new ArrayList<>();
-
-            if (pid1.isEmpty() && pid2.isEmpty())
-            {
-
-            }
-            else {
-                config1.setPhysicalCameraId(pid1);
-                config2.setPhysicalCameraId(pid2);
-            }
-
-            confs.add(config1);
-            confs.add(config2);
-
-            cameraDevice.createCaptureSession(
-                    new SessionConfiguration(SessionConfiguration.SESSION_REGULAR, confs, this.getMainExecutor(), new CameraCaptureSession.StateCallback() {
-                        @Override
-                        public void onConfigured(@NonNull CameraCaptureSession session) {
-                            cameraCaptureSession = session;
-                            updatePreview();
-                        }
-
-                        @Override
-                        public void onConfigureFailed(@NonNull CameraCaptureSession session) {
-                            Toast.makeText(MainActivity.this, "Configuration failed", Toast.LENGTH_SHORT).show();
-                        }
-                    }));
-        } catch (CameraAccessException e) {
-            showDialog(Arrays.toString(e.getStackTrace()));
-            e.printStackTrace();
-        }
-    }
-
-    private void updatePreview() {
-        showDialog("Success");
-        if (cameraDevice == null) {
-            showDialog("Null");
-            Log.e(TAG, "updatePreview: cameraDevices[id] is null");
-            return;
-        }
-        captureRequestBuilder.set(CaptureRequest.CONTROL_MODE, CameraMetadata.CONTROL_MODE_AUTO);
-        try {
-            cameraCaptureSession.setRepeatingRequest(captureRequestBuilder.build(), new CameraCaptureSession.CaptureCallback() {
-                @Override
-                public void onCaptureCompleted(@NonNull CameraCaptureSession session,
-                                               @NonNull CaptureRequest request,
-                                               @NonNull TotalCaptureResult result) {
-                    super.onCaptureCompleted(session, request, result);
-                    showDialog("working");
-                }
-
-                @Override
-                public void onCaptureFailed(CameraCaptureSession session, CaptureRequest request, CaptureFailure failure)
-                {
-                    super.onCaptureFailed(session, request, failure);
-
-                    showDialog("failed " + failure.getReason());
-                }
-
-                @Override
-                public void onCaptureStarted(CameraCaptureSession session, CaptureRequest request, long timestamp, long frameNumber)
-                {
-                    super.onCaptureStarted(session, request, timestamp, frameNumber);
-
-                    showDialog("started at " + timestamp);
-                }
-
-            }, null);
-        } catch (CameraAccessException e) {
-            showDialog(Arrays.toString(e.getStackTrace()));
-            e.printStackTrace();
-        }
-    }
 
     @Override
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
@@ -301,62 +150,6 @@ public class MainActivity extends AppCompatActivity {
                 Toast.makeText(this, "Camera permission is needed to use the camera", Toast.LENGTH_SHORT).show();
             }
         }
-    }
-
-    public void openCameras(View view) {
-
-        try {
-            cameraDevice.close();
-            cameraDevice.close();
-        } catch (Exception e) {
-            // showDialog(Arrays.toString(e.getStackTrace()));
-            e.printStackTrace();
-        }
-
-        try {
-            String logical_id = logical_id_box.getText().toString();
-            String physical_id_1 = physical_id_1_box.getText().toString();
-            String physical_id_2 = physical_id_2_box.getText().toString();
-
-            openCamera(logical_id, physical_id_1, physical_id_2);
-        } catch (Exception e) {
-            showDialog(Arrays.toString(e.getStackTrace()));
-            e.printStackTrace();
-        }
-    }
-
-    public void detectCameras() throws CameraAccessException {
-        CameraManager manager = (CameraManager) getSystemService(CAMERA_SERVICE);
-
-        String result = "";
-
-        for (String lid : manager.getCameraIdList()) {
-            CameraCharacteristics characteristics = manager.getCameraCharacteristics(lid);
-            int direction = characteristics.get(CameraCharacteristics.LENS_FACING);
-            if (!characteristics.getPhysicalCameraIds().isEmpty()) {
-                result += "Available pids for lid " + lid;
-                if (direction == CameraCharacteristics.LENS_FACING_FRONT)
-                {
-                    result += "(FRONT) ";
-                }
-                else if (direction == CameraCharacteristics.LENS_FACING_BACK)
-                {
-                    result += "(BACK) ";
-                }
-                result += ": ";
-                for (String pid : characteristics.getPhysicalCameraIds()) {
-                    result += " " + pid;
-                }
-
-                result += "\n";
-            } else {
-                result += "No physical ids for logical id " + lid + "\n";
-            }
-        }
-
-        System.out.println(result);
-
-        showDialog(result);
     }
 
     private void showDialog(String message) {
@@ -383,63 +176,360 @@ public class MainActivity extends AppCompatActivity {
         dialog.show();
     }
 
-    public void detect(View view)
+    public void selectCamera(View view)
     {
+        // CameraSelectDialog dialog = new CameraSelectDialog(this);
+        // dialog.show();
+
+
+        Dialog dialog = new Dialog(this);
+        dialog.setContentView(R.layout.camera_select_dialog);
+
+        // Initialize views from the dialog layout
+        Button submitButton = dialog.findViewById(R.id.done_button);
+        AutoCompleteTextView lid_box = dialog.findViewById(R.id.lid_box);
+        AutoCompleteTextView pid_one_box = dialog.findViewById(R.id.pid_one_box);
+        AutoCompleteTextView pid_two_box = dialog.findViewById(R.id.pid_two_box);
+
+        ArrayAdapter<String> adapter_lid = new ArrayAdapter<>(this, android.R.layout.simple_dropdown_item_1line, MultiCam.availableCameras(this));
+        lid_box.setAdapter(adapter_lid);
+
+        lid_box.setOnItemClickListener(new AdapterView.OnItemClickListener() {
+            @Override
+            public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
+                ArrayAdapter<String> adapter_pid = new ArrayAdapter<>(MainActivity.this, android.R.layout.simple_dropdown_item_1line, MultiCam.availablePhysicalIds(MainActivity.this, lid_box.getText().toString()));
+                System.out.println(lid_box.getText().toString());
+                pid_one_box.setAdapter(adapter_pid);
+                pid_two_box.setAdapter(adapter_pid);
+            }
+        });
+
+        if (multiCam != null)
+        {
+            lid_box.setText(multiCam.lid, false);
+        }
+
+        ArrayAdapter<String> adapter_pid = new ArrayAdapter<>(this, android.R.layout.simple_dropdown_item_1line, MultiCam.availablePhysicalIds(this, lid_box.getText().toString()));
+        pid_one_box.setAdapter(adapter_pid);
+        pid_two_box.setAdapter(adapter_pid);
+
+        if (multiCam != null) {
+            pid_one_box.setText(multiCam.pid1, false);
+            pid_two_box.setText(multiCam.pid2, false);
+        }
+
+        // Set click listener for the button
+        submitButton.setOnClickListener(mview -> {
+            // String userInput = input.getText().toString();
+            // Handle user input
+            // title.setText("You entered: " + userInput);
+            // input.setText(""); // Clear the input field
+
+            lid = lid_box.getText().toString();
+            pid1 = pid_one_box.getText().toString();
+            pid2 = pid_two_box.getText().toString();
+
+            multiCam = new MultiCam(this, lid, pid1, pid2, previews[0], previews[1]);
+
+            dialog.dismiss();
+        });
+
+        // Show the dialog
+        dialog.show();
+
+        Window window = dialog.getWindow();
+        window.setLayout(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+    }
+
+    public void toggleFlash(View view)
+    {
+        boolean flash = multiCam.toggleFlash();
+
+        ImageButton flashButton = findViewById(R.id.flash_button);
+
+        if (flash)
+        {
+            flashButton.setImageResource(R.drawable.baseline_flash_on_40);
+        }
+        else
+        {
+            flashButton.setImageResource(R.drawable.baseline_flash_off_40);
+        }
+    }
+
+    public void setExposure(View view)
+    {
+        if (isSliderVisible)
+            return;
+
+        LinearLayout sliderLayout = findViewById(R.id.slider_layout);
+
+        fadeInAnimation(sliderLayout);
+
+        Slider slider = findViewById(R.id.slider);
+
+
+        Range<Long> exposureRange = new Range<>(0L, 1000L);
+
         try {
-            bruteforce();
-            detectCameras();
+            exposureRange = multiCam.getExposureRange();
         }
         catch (Exception e)
         {
-            showDialog(Arrays.toString(e.getStackTrace()));
             e.printStackTrace();
         }
-    }
+        try {
 
-    public void bruteforce() throws CameraAccessException {
-        String result = "";
-
-        CameraManager manager = (CameraManager) getSystemService(CAMERA_SERVICE);
-
-        for (int i = 2;i <= 511;++i)
+            slider.setValueFrom(exposureRange.getLower() / 100000);
+            slider.setValueTo(exposureRange.getUpper() / 100000);
+            slider.setValue(multiCam.getExposureInNanos() / 100000);
+        }
+        catch (Exception e)
         {
-            try {
-            CameraCharacteristics characteristics = manager.getCameraCharacteristics(Integer.toString(i));
-
-            result += "Found at lid " + i + ": ";
-
-            if (characteristics != null)
-            {
-                for (String pid : characteristics.getPhysicalCameraIds())
-                {
-                    result += pid + " ";
-                }
-
-                result += "\n";
-            }
-        }
-            catch (Exception e)
-            {
-                e.printStackTrace();
-            }
+            showDialog("" + exposureRange.getLower() / 100000 + " " + exposureRange.getUpper() / 100000 + " " + multiCam.getExposureInNanos() / 100000);
         }
 
+        Handler handler = new Handler();
 
-        showDialog(result);
+        Slider.OnSliderTouchListener touchListener = new Slider.OnSliderTouchListener() {
+            @Override
+            public void onStartTrackingTouch(Slider slider) {
+                // Cancel any existing callbacks
+                handler.removeCallbacks(runnable);
+            }
+
+            @Override
+            public void onStopTrackingTouch(Slider slider)
+            {
+                handler.postDelayed(runnable, 700);
+            }
+        };
+
+        Slider.OnChangeListener changeListener = new Slider.OnChangeListener() {
+            @Override
+            public void onValueChange(@NonNull Slider slider, float value, boolean fromUser) {
+                handler.removeCallbacks(runnable);
+                multiCam.setExposureISO((long) value * 100000, multiCam.getIso());
+                System.out.println(multiCam.getIso());
+            }
+        };
+
+        runnable = new Runnable() {
+            @Override
+            public void run() {
+                long value = (long) slider.getValue();
+                System.out.println("Value: " + value);
+                fadeOutAnimation(sliderLayout);
+                slider.removeOnChangeListener(changeListener);
+                slider.removeOnSliderTouchListener(touchListener);
+
+                multiCam.setExposureISO(value * 100000, multiCam.getIso());
+            }
+        };
+
+        handler.postDelayed(runnable, 1000);
+
+
+        slider.addOnChangeListener(changeListener);
+
+
+
+        slider.addOnSliderTouchListener(touchListener);
+
     }
 
-    public void setTorchOn(View view)
+    public void setIso(View view)
     {
-        String lid = logical_id_box.getText().toString();
+        if (isSliderVisible)
+            return;
 
-        CameraManager manager = (CameraManager) getSystemService(CAMERA_SERVICE);
+        LinearLayout sliderLayout = findViewById(R.id.slider_layout);
+
+        fadeInAnimation(sliderLayout);
+
+        Slider slider = findViewById(R.id.slider);
+
+
+        Range<Integer> isoRange = new Range<>(0, 2000);
 
         try {
-            manager.setTorchMode(lid, !torch);
-            torch = !torch;
+            isoRange = multiCam.getIsoRange();
         }
-        catch (Exception e) {
+        catch (Exception e)
+        {
             e.printStackTrace();
         }
+
+        try {
+
+            slider.setValueFrom(isoRange.getLower());
+            slider.setValueTo(isoRange.getUpper() - 55000);
+            slider.setValue(multiCam.getIso());
+        }
+        catch (Exception e)
+        {
+            slider.setValue(isoRange.getUpper() - 10);
+        }
+
+        Handler handler = new Handler();
+
+        Slider.OnChangeListener onChangeListener = new Slider.OnChangeListener() {
+            @Override
+            public void onValueChange(@NonNull Slider slider, float value, boolean fromUser) {
+                handler.removeCallbacks(runnable);
+                System.out.println(multiCam.getExposureInNanos());
+                multiCam.setExposureISO(multiCam.getExposureInNanos(), (int) value);
+            }
+        };
+
+        Slider.OnSliderTouchListener onSliderTouchListener = new Slider.OnSliderTouchListener() {
+            @Override
+            public void onStartTrackingTouch(Slider slider) {
+                // Cancel any existing callbacks
+                handler.removeCallbacks(runnable);
+            }
+
+            @Override
+            public void onStopTrackingTouch(Slider slider)
+            {
+                handler.postDelayed(runnable, 700);
+            }
+        };
+
+
+        runnable = new Runnable() {
+            @Override
+            public void run() {
+                int value = (int) slider.getValue();
+                System.out.println("Value: " + value);
+                fadeOutAnimation(sliderLayout);
+                slider.removeOnSliderTouchListener(onSliderTouchListener);
+                slider.removeOnChangeListener(onChangeListener);
+
+                multiCam.setExposureISO(multiCam.getExposureInNanos(), value);
+            }
+        };
+
+        handler.postDelayed(runnable, 1000);
+
+        slider.addOnChangeListener(onChangeListener);
+
+        slider.addOnSliderTouchListener(onSliderTouchListener);
+
+    }
+
+    public void setFocusDistance(View view)
+    {
+        if (isSliderVisible)
+            return;
+
+        LinearLayout sliderLayout = findViewById(R.id.slider_layout);
+
+        fadeInAnimation(sliderLayout);
+
+        Slider slider = findViewById(R.id.slider);
+
+        float focusDistance = 0.0f;
+
+        try {
+            focusDistance = multiCam.getFocusDistanceMin();
+        }
+        catch (Exception e)
+        {
+            e.printStackTrace();
+        }
+
+        slider.setValueFrom(0.0f);
+        slider.setValueTo(focusDistance);
+        slider.setValue(multiCam.getFocusDistance());
+
+        Handler handler = new Handler();
+
+        Slider.OnChangeListener onChangeListener = new Slider.OnChangeListener() {
+            @Override
+            public void onValueChange(@NonNull Slider slider, float value, boolean fromUser) {
+                handler.removeCallbacks(runnable);
+                multiCam.setFocus(value);
+            }
+        };
+
+        Slider.OnSliderTouchListener onSliderTouchListener = new Slider.OnSliderTouchListener() {
+            @Override
+            public void onStartTrackingTouch(Slider slider) {
+                // Cancel any existing callbacks
+                handler.removeCallbacks(runnable);
+            }
+
+            @Override
+            public void onStopTrackingTouch(Slider slider)
+            {
+                handler.postDelayed(runnable, 700);
+            }
+        };
+
+        runnable = new Runnable() {
+            @Override
+            public void run() {
+                float value = (float) slider.getValue();
+                System.out.println("Value: " + value);
+                fadeOutAnimation(sliderLayout);
+
+                slider.removeOnSliderTouchListener(onSliderTouchListener);
+                slider.removeOnChangeListener(onChangeListener);
+
+                multiCam.setFocus(value);
+            }
+        };
+
+        handler.postDelayed(runnable, 1000);
+
+
+        slider.addOnChangeListener(onChangeListener);
+
+        slider.addOnSliderTouchListener(onSliderTouchListener);
+
+    }
+
+    private void hideSystemUI() {
+        View decorView = getWindow().getDecorView();
+        decorView.setSystemUiVisibility(
+                View.SYSTEM_UI_FLAG_FULLSCREEN
+                        | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                        | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                        | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                        | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN);
+    }
+
+    void fadeInAnimation(View view)
+    {
+        view.setAlpha(0f);
+        view.setVisibility(View.VISIBLE);
+
+        ObjectAnimator fadeIn = ObjectAnimator.ofFloat(view, "alpha", 0f, 1f);
+
+        fadeIn.start();
+
+        isSliderVisible = true;
+    }
+
+    void fadeOutAnimation(View view)
+    {
+        view.setAlpha(1f);
+        view.setVisibility(View.VISIBLE);
+
+        ObjectAnimator fadeOut = ObjectAnimator.ofFloat(view, "alpha", 1f, 0f);
+
+        fadeOut.addListener(new AnimatorListenerAdapter() {
+            @Override
+            public void onAnimationEnd(Animator animation) {
+                super.onAnimationEnd(animation);
+
+                view.setVisibility(View.INVISIBLE);
+
+                isSliderVisible = false;
+            }
+        });
+
+        fadeOut.start();
     }
 }
