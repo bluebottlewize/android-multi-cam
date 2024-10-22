@@ -58,6 +58,7 @@
             android:layout_height="60dp"
             android:layout_weight="1"
             android:background="@android:color/transparent"
+            android:longClickable="true"
             android:onClick="setExposure"
             app:srcCompat="@drawable/baseline_exposure_40" />
 
@@ -67,6 +68,7 @@
             android:layout_height="60dp"
             android:layout_weight="1"
             android:background="@android:color/transparent"
+            android:longClickable="true"
             android:onClick="setIso"
             app:srcCompat="@drawable/baseline_iso_40" />
 
@@ -76,6 +78,7 @@
             android:layout_height="60dp"
             android:layout_weight="1"
             android:background="@android:color/transparent"
+            android:longClickable="true"
             android:onClick="setFocusDistance"
             app:srcCompat="@drawable/baseline_center_focus_strong_40" />
 
@@ -101,5 +104,16 @@
 
         </com.google.android.material.slider.Slider>
     </LinearLayout>
+
+    <ImageButton
+        android:id="@+id/record_button"
+        android:layout_width="100dp"
+        android:layout_height="100dp"
+        android:background="@android:color/transparent"
+        android:onClick="record"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:srcCompat="@drawable/baseline_fiber_manual_record_90" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

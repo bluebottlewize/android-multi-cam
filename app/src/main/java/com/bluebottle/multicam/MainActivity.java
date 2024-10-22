@@ -4,8 +4,10 @@ import android.Manifest;
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.ObjectAnimator;
+import android.app.Activity;
 import android.app.Dialog;
 import android.content.DialogInterface;
+import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.ImageFormat;
 import android.hardware.camera2.CameraAccessException;
@@ -20,6 +22,7 @@ import android.hardware.camera2.TotalCaptureResult;
 import android.hardware.camera2.params.OutputConfiguration;
 import android.hardware.camera2.params.SessionConfiguration;
 import android.media.ImageReader;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
@@ -33,6 +36,7 @@ import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import android.view.View;
 import android.view.Window;
+import android.view.WindowManager;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.AutoCompleteTextView;
@@ -56,6 +60,7 @@ import java.util.Arrays;
 public class MainActivity extends AppCompatActivity {
 
     private static final int CAMERA_REQUEST_CODE = 100;
+    private static final int REQUEST_CODE_OPEN_DIRECTORY = 200;
 
     private SurfaceView[] previews;
 
@@ -70,6 +75,8 @@ public class MainActivity extends AppCompatActivity {
 
     boolean isSliderVisible = false;
 
+    Uri savedDirectory;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -78,6 +85,12 @@ public class MainActivity extends AppCompatActivity {
         if (getSupportActionBar() != null) {
             getSupportActionBar().hide();
         }
+
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+
+        lid = MultiCam.availableCameras(this).get(0);
+        pid1 = "";
+        pid2 = "";
 
         previews = new SurfaceView[2];
 
@@ -93,7 +106,8 @@ public class MainActivity extends AppCompatActivity {
                 ++lock;
 
                 if (lock == 2) {
-                    // openCamera(0, 0);
+                    lock = 0;
+                    openCamera();
                 }
             }
 
@@ -103,19 +117,20 @@ public class MainActivity extends AppCompatActivity {
 
             @Override
             public void surfaceDestroyed(@NonNull SurfaceHolder holder) {
-
+                lock = 0;
+                System.out.println("surface destroyed");
+                stopCamera();
             }
 
         });
-
-
         holder2.addCallback(new SurfaceHolder.Callback() {
             @Override
             public void surfaceCreated(@NonNull SurfaceHolder holder) {
 
                 ++lock;
                 if (lock == 2) {
-                    // openCamera(0, 0);
+                    lock = 0;
+                    openCamera();
                 }
             }
 
@@ -125,19 +140,73 @@ public class MainActivity extends AppCompatActivity {
 
             @Override
             public void surfaceDestroyed(@NonNull SurfaceHolder holder) {
+                lock = 0;
+                System.out.println("surface destroyed");
 
+                stopCamera();
             }
 
         });
 
-        multiCam = new MultiCam(this, MultiCam.availableCameras(this).get(0), "", "", previews[0], previews[1]);
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
+        startActivityForResult(intent, REQUEST_CODE_OPEN_DIRECTORY);
+
+        System.out.println(savedDirectory);
+
+
 
         // Request camera permissions
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
             ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.CAMERA}, CAMERA_REQUEST_CODE);
         }
+
     }
 
+    private void stopCamera()
+    {
+        try {
+            multiCam.stopPreview();
+            multiCam.stopCamera();
+        }
+        catch (Exception e)
+        {
+            e.printStackTrace();
+        }
+    }
+
+    private void openCamera()
+    {
+        try {
+            if (multiCam != null) {
+                multiCam.stopPreview();
+                multiCam.stopCamera();
+            }
+        }
+        catch (Exception e)
+        {
+            e.printStackTrace();
+        }
+
+        multiCam = new MultiCam(this, lid, pid1, pid2, previews[0], previews[1]);
+        multiCam.savedDirectory = savedDirectory;
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == REQUEST_CODE_OPEN_DIRECTORY && resultCode == Activity.RESULT_OK) {
+            Uri directoryUri = data.getData();
+            takePersistableUriPermission(directoryUri);
+            savedDirectory = directoryUri;
+
+            openCamera();
+            System.out.println(multiCam.savedDirectory);
+        }
+    }
+
+    private void takePersistableUriPermission(Uri uri) {
+        getContentResolver().takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+    }
 
     @Override
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
@@ -199,6 +268,8 @@ public class MainActivity extends AppCompatActivity {
             public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
                 ArrayAdapter<String> adapter_pid = new ArrayAdapter<>(MainActivity.this, android.R.layout.simple_dropdown_item_1line, MultiCam.availablePhysicalIds(MainActivity.this, lid_box.getText().toString()));
                 System.out.println(lid_box.getText().toString());
+                pid_one_box.setText("", false);
+                pid_two_box.setText("", false);
                 pid_one_box.setAdapter(adapter_pid);
                 pid_two_box.setAdapter(adapter_pid);
             }
@@ -229,7 +300,7 @@ public class MainActivity extends AppCompatActivity {
             pid1 = pid_one_box.getText().toString();
             pid2 = pid_two_box.getText().toString();
 
-            multiCam = new MultiCam(this, lid, pid1, pid2, previews[0], previews[1]);
+            openCamera();
 
             dialog.dismiss();
         });
@@ -363,12 +434,13 @@ public class MainActivity extends AppCompatActivity {
         try {
 
             slider.setValueFrom(isoRange.getLower());
-            slider.setValueTo(isoRange.getUpper() - 55000);
+            slider.setValueTo(isoRange.getUpper() - 50000);
             slider.setValue(multiCam.getIso());
         }
         catch (Exception e)
         {
-            slider.setValue(isoRange.getUpper() - 10);
+            slider.setValueTo(multiCam.getIso() + 3000);
+            slider.setValue(multiCam.getIso());
         }
 
         Handler handler = new Handler();
@@ -488,6 +560,17 @@ public class MainActivity extends AppCompatActivity {
 
         slider.addOnSliderTouchListener(onSliderTouchListener);
 
+    }
+
+    public void record(View view)
+    {
+        if (multiCam.isRecording)
+        {
+            multiCam.stopRecording();
+        }
+        else {
+            multiCam.startRecording();
+        }
     }
 
     private void hideSystemUI() {

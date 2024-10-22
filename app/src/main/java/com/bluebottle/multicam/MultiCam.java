@@ -2,9 +2,9 @@ package com.bluebottle.multicam;
 
 import static android.content.ContentValues.TAG;
 import static android.content.Context.CAMERA_SERVICE;
-import static androidx.core.content.ContextCompat.getSystemService;
 
 import android.Manifest;
+import android.app.Activity;
 import android.content.Context;
 import android.content.pm.PackageManager;
 import android.graphics.ImageFormat;
@@ -20,28 +20,42 @@ import android.hardware.camera2.CaptureResult;
 import android.hardware.camera2.TotalCaptureResult;
 import android.hardware.camera2.params.OutputConfiguration;
 import android.hardware.camera2.params.SessionConfiguration;
+import android.media.MediaRecorder;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Handler;
 import android.os.HandlerThread;
+import android.os.ParcelFileDescriptor;
+import android.provider.DocumentsContract;
 import android.util.Log;
 import android.util.Range;
 import android.util.Size;
-import android.view.Surface;
 import android.view.SurfaceView;
-import android.view.View;
+import android.widget.ImageButton;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.core.app.ActivityCompat;
+import androidx.documentfile.provider.DocumentFile;
 
+import java.io.File;
+import java.io.IOException;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Locale;
 
 public class MultiCam {
 
-    CameraDevice cameraDevice;
+    MediaRecorder recorder_1;
+    MediaRecorder recorder_2;
+
+    static CameraDevice cameraDevice;
     CaptureRequest.Builder captureRequestBuilder;
-    CameraCaptureSession cameraCaptureSession;
+    static CameraCaptureSession cameraCaptureSession;
 
     Context context;
     CameraManager manager;
@@ -50,7 +64,10 @@ public class MultiCam {
     String pid1, pid2;
     SurfaceView s1, s2;
 
+    Uri savedDirectory;
+
     boolean flash = false;
+    boolean both = false;
 
     private Handler mBackgroundHandler;
     private HandlerThread mBackgroundThread;
@@ -58,6 +75,10 @@ public class MultiCam {
     long exposureInNanos;
     int iso;
     float focusDistance;
+
+    Size size;
+
+    boolean isRecording = false;
 
     public MultiCam(Context context, String lid, String pid1, String pid2, SurfaceView s1, SurfaceView s2) {
 
@@ -69,13 +90,13 @@ public class MultiCam {
         this.s1 = s1;
         this.s2 = s2;
 
-        if (cameraCaptureSession != null)
-        {
+        both = !(pid1.isEmpty() && pid2.isEmpty());
+
+        if (cameraCaptureSession != null) {
             cameraCaptureSession.close();
         }
 
-        if (cameraDevice != null)
-        {
+        if (cameraDevice != null) {
             cameraDevice.close();
         }
 
@@ -84,6 +105,28 @@ public class MultiCam {
             startBackgroundThread();
 
             CameraCharacteristics camera = manager.getCameraCharacteristics(lid);
+            Log.d(TAG, "Camera " + lid + " capabilities: " + Arrays.toString(camera.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES)));
+            Log.d(TAG, "Is logical multi-camera: " + camera.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES));
+
+            for (int i : camera.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES)) {
+                if (i == CameraMetadata.REQUEST_AVAILABLE_CAPABILITIES_LOGICAL_MULTI_CAMERA) {
+                    System.out.println("Logical camera confirmed");
+                }
+            }
+
+
+            CameraCharacteristics chars = manager.getCameraCharacteristics(lid);
+            int[] capabilities = chars.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES);
+            for (int capability : capabilities) {
+                Log.d(TAG, "Camera capability: " + capability);
+            }
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                System.out.println(manager.getConcurrentCameraIds());
+            }
+
+//        (CameraMetadata.REQUEST_AVAILABLE_CAPABILITIES_LOGICAL_MULTI_CAMERA));
+
             Size previewSize = camera.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP).getOutputSizes(ImageFormat.PRIVATE)[9]; // Get a suitable preview size
 
 
@@ -106,11 +149,14 @@ public class MultiCam {
             }
 
             int x = camera.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP).getOutputSizes(ImageFormat.PRIVATE).length;
-            best = camera.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP).getOutputSizes(ImageFormat.PRIVATE)[19];
+            best = camera.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP).getOutputSizes(ImageFormat.PRIVATE)[3];
+            size = best;
             s1.getHolder().setFixedSize(best.getWidth(), best.getHeight());
             s1.getHolder().setFixedSize(best.getWidth(), best.getHeight());
 
             dimension += "chose " + best.getWidth() + " " + best.getHeight() + "\n";
+
+            // System.out.println(camera.get(CameraMetadata.REQUEST_AVAILABLE_CAPABILITIES_LOGICAL_MULTI_CAMERA));
 
             // showDialog(dimension);
             // Create an ImageReader to handle the preview frames
@@ -155,13 +201,20 @@ public class MultiCam {
 
     public void createCameraPreviewSession() {
         try {
-            captureRequestBuilder = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_RECORD);
+            captureRequestBuilder = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
+
+//            captureRequestBuilder = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
+//            captureRequestBuilder.addTarget(s1.getHolder().getSurface());
+//            captureRequestBuilder.addTarget(s2.getHolder().getSurface());
+
+            captureRequestBuilder.set(CaptureRequest.CONTROL_MODE, CameraMetadata.CONTROL_MODE_AUTO);
 
             captureRequestBuilder.addTarget(s1.getHolder().getSurface());
             captureRequestBuilder.addTarget(s2.getHolder().getSurface());
 
             OutputConfiguration config1 = new OutputConfiguration(s1.getHolder().getSurface());
             OutputConfiguration config2 = new OutputConfiguration(s2.getHolder().getSurface());
+
 
             ArrayList<OutputConfiguration> confs = new ArrayList<>();
 
@@ -230,19 +283,26 @@ public class MultiCam {
                 public void onCaptureFailed(@NonNull CameraCaptureSession session, @NonNull CaptureRequest request, @NonNull CaptureFailure failure) {
                     super.onCaptureFailed(session, request, failure);
 
-                    session.close();
+                    // session.close();
 
                     // handler.postDelayed(r, 1000);
 
-                    createCameraPreviewSession();
+                    // createCameraPreviewSession;
+
+                    startPreview();
 
 //                    if (failure.wasImageCaptured())
 //                        showDialog("Image was captured");
 //                    else
 //                        showDialog("image was not captured");
 
+                    System.out.println(failure.getReason());
+                    System.out.println("frame " + failure.getFrameNumber());
+//                    Log.e(TAG, "Session configuration: " + session.getDeviceStateCallback().toString()); }
+
+
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-//                        showDialog("failed " + failure.getReason() + " ON " + failure.getPhysicalCameraId());
+                        System.out.println("failed " + failure.getReason() + " ON " + failure.getPhysicalCameraId());
                     } else {
 //                        showDialog("failed " + failure.getReason());
                     }
@@ -260,6 +320,14 @@ public class MultiCam {
             // showDialog(Arrays.toString(e.getStackTrace()));
             e.printStackTrace();
         }
+    }
+
+    public void stopPreview() {
+        cameraCaptureSession.close();
+    }
+
+    public void stopCamera() {
+        cameraDevice.close();
     }
 
     public void setAutoMode() {
@@ -290,13 +358,10 @@ public class MultiCam {
 
         flash = !flash;
 
-        if (flash)
-        {
+        if (flash) {
             captureRequestBuilder.set(CaptureRequest.CONTROL_AE_MODE, CameraMetadata.CONTROL_AE_MODE_ON);
             captureRequestBuilder.set(CaptureRequest.FLASH_MODE, CameraMetadata.FLASH_MODE_TORCH);
-        }
-        else
-        {
+        } else {
             captureRequestBuilder.set(CaptureRequest.CONTROL_AE_MODE, CameraMetadata.CONTROL_AE_MODE_ON);
             captureRequestBuilder.set(CaptureRequest.FLASH_MODE, CameraMetadata.FLASH_MODE_OFF);
         }
@@ -336,9 +401,7 @@ public class MultiCam {
             for (String pid : characteristics.getPhysicalCameraIds()) {
                 ids.add(pid);
             }
-        }
-        catch (Exception e)
-        {
+        } catch (Exception e) {
             e.printStackTrace();
         }
 
@@ -359,27 +422,195 @@ public class MultiCam {
         return manager.getCameraCharacteristics(lid).get(CameraCharacteristics.SENSOR_INFO_SENSITIVITY_RANGE);
     }
 
-    public float getFocusDistanceMin()  {
+    public float getFocusDistanceMin() {
         try {
             return manager.getCameraCharacteristics(lid).get(CameraCharacteristics.LENS_INFO_MINIMUM_FOCUS_DISTANCE);
-        }
-        catch (Exception e)
-        {
+        } catch (Exception e) {
             return 0.0f;
         }
     }
 
-    public long getExposureInNanos()
-    {
+    public long getExposureInNanos() {
         return exposureInNanos;
     }
 
-    public int getIso()
-    {
+    public int getIso() {
         return iso;
     }
 
     public float getFocusDistance() {
         return focusDistance;
+    }
+
+    private void setUpMediaRecorder() throws IOException {
+
+        System.out.println(savedDirectory);
+        DocumentFile savedFolder = DocumentFile.fromTreeUri(context, savedDirectory);
+        String filename = getNextVideoName();
+
+        DocumentFile outputFile_1 = savedFolder.createFile("video/mp4", filename + "_" + lid + "_" + pid1 + ".mp4");
+        ParcelFileDescriptor pfd_1 = context.getContentResolver().openFileDescriptor(outputFile_1.getUri(), "w");
+        recorder_1 = new MediaRecorder();
+
+        Toast.makeText(context, "Recording Started", Toast.LENGTH_SHORT);
+
+        recorder_1.setAudioSource(MediaRecorder.AudioSource.MIC);
+        recorder_1.setVideoSource(MediaRecorder.VideoSource.SURFACE);
+        recorder_1.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4);
+        recorder_1.setOutputFile(pfd_1.getFileDescriptor());
+        recorder_1.setVideoEncodingBitRate(10000000);
+        recorder_1.setVideoFrameRate(30);
+        recorder_1.setVideoSize(size.getWidth(), size.getHeight());
+        recorder_1.setVideoEncoder(MediaRecorder.VideoEncoder.H264);
+        recorder_1.setAudioEncoder(MediaRecorder.AudioEncoder.AAC);
+        Toast.makeText(context, "Recording Started", Toast.LENGTH_SHORT);
+        recorder_1.prepare();
+
+        Toast.makeText(context, "Recording Started", Toast.LENGTH_SHORT);
+        System.out.println("mediarecorder 1 ready");
+
+        if (both) {
+            DocumentFile outputFile_2 = savedFolder.createFile("video/mp4", filename + "_" + lid + "_" + pid2 + ".mp4");
+            ParcelFileDescriptor pfd_2 = context.getContentResolver().openFileDescriptor(outputFile_2.getUri(), "w");
+
+            recorder_2 = new MediaRecorder();
+
+            recorder_2.setAudioSource(MediaRecorder.AudioSource.MIC);
+            recorder_2.setVideoSource(MediaRecorder.VideoSource.SURFACE);
+            recorder_2.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4);
+            recorder_2.setOutputFile(pfd_2.getFileDescriptor());
+            recorder_2.setVideoEncodingBitRate(10000000);
+            recorder_2.setVideoFrameRate(30);
+            recorder_2.setVideoSize(size.getWidth(), size.getHeight());
+            recorder_2.setVideoEncoder(MediaRecorder.VideoEncoder.H264);
+            recorder_2.setAudioEncoder(MediaRecorder.AudioEncoder.AAC);
+            recorder_2.prepare();
+
+            System.out.println("mediarecorder 2 ready");
+        }
+
+        Toast.makeText(context, "Recording Started", Toast.LENGTH_SHORT);
+    }
+
+    public void startRecording() {
+        try {
+
+            System.out.println("recording starting");
+
+            stopPreview();
+
+            setUpMediaRecorder();
+
+            System.out.println("mediarecorder ready");
+
+            Toast.makeText(context, "Recording Started", Toast.LENGTH_SHORT);
+
+            captureRequestBuilder = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_RECORD);
+
+            captureRequestBuilder.addTarget(s1.getHolder().getSurface());
+            captureRequestBuilder.addTarget(s2.getHolder().getSurface());
+            captureRequestBuilder.addTarget(recorder_1.getSurface());
+
+            OutputConfiguration config1 = new OutputConfiguration(s1.getHolder().getSurface());
+            OutputConfiguration config2 = new OutputConfiguration(s2.getHolder().getSurface());
+            OutputConfiguration config3 = new OutputConfiguration(recorder_1.getSurface());
+
+            ArrayList<OutputConfiguration> confs = new ArrayList<>();
+
+            if (!both) {
+                System.out.println("Capturing only logical camera");
+
+                confs.add(config1);
+                confs.add(config2);
+                confs.add(config3);
+            } else {
+                config1.setPhysicalCameraId(pid1);
+                config2.setPhysicalCameraId(pid2);
+                config3.setPhysicalCameraId(pid1);
+
+
+                confs.add(config1);
+                confs.add(config2);
+                confs.add(config3);
+
+                captureRequestBuilder.addTarget(recorder_2.getSurface());
+                OutputConfiguration config4 = new OutputConfiguration(recorder_2.getSurface());
+                config4.setPhysicalCameraId(pid2);
+                confs.add(config4);
+            }
+
+
+            Toast.makeText(context, "Recording Started", Toast.LENGTH_SHORT);
+
+            cameraDevice.createCaptureSession(new SessionConfiguration(SessionConfiguration.SESSION_REGULAR, confs, context.getMainExecutor(), new CameraCaptureSession.StateCallback() {
+
+                @Override
+                public void onConfigured(@NonNull CameraCaptureSession session) {
+                    cameraCaptureSession = session;
+                    startPreview();
+                    isRecording = true;
+
+                    System.out.println("recording started");
+
+                    Toast.makeText(context, "Recording Started", Toast.LENGTH_SHORT);
+
+                    recorder_1.start();
+                    if (both) {
+                        recorder_2.start();
+                    }
+                }
+
+                @Override
+                public void onConfigureFailed(@NonNull CameraCaptureSession cameraCaptureSession) {
+                    System.out.println("Failed configuration");
+                    Toast.makeText(context, "Failed", Toast.LENGTH_SHORT).show();
+                }
+            }));
+
+            ImageButton record_button = ((Activity) context).findViewById(R.id.record_button);
+
+            record_button.setImageResource(R.drawable.outline_stop_circle_90);
+
+        } catch (CameraAccessException | IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    public static String getNextVideoName() {
+        LocalDateTime currentDate = LocalDateTime.now();
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss").withLocale(Locale.getDefault()).withZone(ZoneId.systemDefault());
+        String formattedDate = currentDate.format(formatter);
+
+        String name = "VID_" + formattedDate;
+
+        return name;
+    }
+
+    public void stopRecording() {
+        isRecording = false;
+
+        try {
+            recorder_1.stop();
+            recorder_1.reset();
+            recorder_1.release();
+            recorder_1 = null;
+
+            if (both) {
+                recorder_2.stop();
+                recorder_2.reset();
+                recorder_2.release();
+                recorder_2 = null;
+            }
+
+            Toast.makeText(context, "Video saved", Toast.LENGTH_SHORT).show();
+        } catch (Exception e) {
+            Toast.makeText(context, "Error in saving video", Toast.LENGTH_SHORT).show();
+        }
+
+        createCameraPreviewSession();
+
+        ImageButton record_button = ((Activity) context).findViewById(R.id.record_button);
+
+        record_button.setImageResource(R.drawable.baseline_fiber_manual_record_90);
     }
 }
