@@ -152,7 +152,7 @@ public class MultiCam {
             best = camera.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP).getOutputSizes(ImageFormat.PRIVATE)[3];
             size = best;
             s1.getHolder().setFixedSize(best.getWidth(), best.getHeight());
-            s1.getHolder().setFixedSize(best.getWidth(), best.getHeight());
+            s2.getHolder().setFixedSize(best.getWidth(), best.getHeight());
 
             dimension += "chose " + best.getWidth() + " " + best.getHeight() + "\n";
 
