@@ -29,6 +29,14 @@
                 android:textStyle="bold" />
 
             <TextView
+                android:id="@+id/lid_box"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="lid"
+                android:textColor="@color/fontcolor"
+                android:textSize="16sp" />
+
+            <TextView
                 android:id="@+id/camera_one_box"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"

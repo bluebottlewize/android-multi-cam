@@ -66,7 +66,7 @@ public class VideosActivity extends AppCompatActivity
         System.out.println(itemList.size());
 
         // Set up RecyclerView
-        VideosAdapter adapter = new VideosAdapter(itemList);
+        VideosAdapter adapter = new VideosAdapter(itemList, this);
         recyclerView.setLayoutManager(new LinearLayoutManager(this));
         recyclerView.setAdapter(adapter);
     }

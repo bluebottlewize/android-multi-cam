@@ -15,30 +15,24 @@ public class VideoItem
         this.path_one = path_one;
         this.path_two = path_two;
 
-        String regex = "^(VID_\\d{8}_\\d{6})_(\\d+)_(\\d+)\\.mp4$";
+        lid = "LID :\t\t";
+        pid1 = "PID :\t\t";
+        pid2 = "PID :\t\t";
+
+        String regex = "^(VID_\\d{8}_\\d{6})_(\\d*)_(\\d*)\\.mp4$";
         Pattern pattern = Pattern.compile(regex);
 
         Matcher matcher = pattern.matcher(path_one);
         if (matcher.matches())
         {
-            lid = matcher.group(2);
-            pid1 = matcher.group(3);
+            lid += matcher.group(2);
+            pid1 += matcher.group(3);
         }
 
         matcher = pattern.matcher(path_two);
         if (matcher.matches())
         {
-            pid2 = matcher.group(3);
+            pid2 += matcher.group(3);
         }
-    }
-
-    public String getNameFromFilename(String filename)
-    {
-        return filename;
-    }
-
-    public String getSubtitle()
-    {
-        return name;
     }
 }

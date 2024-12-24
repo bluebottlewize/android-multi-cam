@@ -26,6 +26,17 @@
         app:layout_constraintTop_toBottomOf="@+id/videoView1" />
 
     <!-- Custom Media Controls -->
+    <ImageButton
+        android:id="@+id/play_pause_button"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:backgroundTint="#00FFFFFF"
+        android:src="@drawable/baseline_play_arrow_90"
+        app:layout_constraintBottom_toBottomOf="@+id/videoView1"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/videoView1" />
+
     <LinearLayout
         android:id="@+id/mediaControls"
         android:layout_width="match_parent"
@@ -37,23 +48,14 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent">
 
-        <Button
-            android:id="@+id/playButton"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Play" />
-
-        <Button
-            android:id="@+id/pauseButton"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Pause" />
-
-        <SeekBar
-            android:id="@+id/seekBar"
+        <com.google.android.material.slider.Slider
+            android:id="@+id/playback_seekbar"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_weight="1" />
+            android:layout_marginLeft="4dp"
+            android:layout_marginRight="4dp"
+            android:layout_weight="1.0" />
+
     </LinearLayout>
 
 </androidx.constraintlayout.widget.ConstraintLayout>

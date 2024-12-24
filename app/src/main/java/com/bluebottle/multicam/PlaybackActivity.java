@@ -1,20 +1,34 @@
 package com.bluebottle.multicam;
 
-import android.net.Uri;
+import android.animation.Animator;
+import android.animation.AnimatorListenerAdapter;
+import android.animation.ObjectAnimator;
+import android.content.Intent;
 import android.os.Bundle;
 import android.os.Handler;
-import android.widget.Button;
-import android.widget.SeekBar;
+import android.view.MotionEvent;
+import android.view.View;
+import android.widget.ImageButton;
 import android.widget.VideoView;
 
+import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
+
+import com.google.android.material.slider.Slider;
+
+import java.io.File;
 
 public class PlaybackActivity extends AppCompatActivity
 {
 
     private VideoView videoView1, videoView2;
-    private SeekBar seekBar;
+    private Slider seekBar;
+    private ImageButton playPauseButton;
+
     private Handler handler = new Handler();
+
+    boolean isPlaying = false;
+    boolean isUiVisible = true;
 
     @Override
     protected void onCreate(Bundle savedInstanceState)
@@ -22,66 +36,72 @@ public class PlaybackActivity extends AppCompatActivity
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_playback);
 
+        Intent intent = getIntent();
+        String video_id = intent.getStringExtra("video_id");
+
         videoView1 = findViewById(R.id.videoView1);
         videoView2 = findViewById(R.id.videoView2);
-        Button playButton = findViewById(R.id.playButton);
-        Button pauseButton = findViewById(R.id.pauseButton);
-        seekBar = findViewById(R.id.seekBar);
+        playPauseButton = findViewById(R.id.play_pause_button);
+        seekBar = findViewById(R.id.playback_seekbar);
 
-        // Set video URIs
-        Uri videoUri1 = Uri.parse("android.resource://" + getPackageName() + "/" + R.raw.video1);
-        Uri videoUri2 = Uri.parse("android.resource://" + getPackageName() + "/" + R.raw.video2);
+        String path_one, path_two;
+        File video = new File(this.getFilesDir(), "videos/" + video_id);
+        path_one = video.listFiles()[0].getPath();
+        videoView1.setVideoPath(path_one);
 
-        videoView1.setVideoURI(videoUri1);
-        videoView2.setVideoURI(videoUri2);
+        if (video.listFiles().length == 2)
+        {
+            path_two = video.listFiles()[1].getPath();
+            videoView2.setVideoPath(path_two);
+        }
+        else
+        {
+            videoView2.setVideoPath(path_one);
+        }
 
         // Sync start of both videos
         videoView1.setOnPreparedListener(mp -> {
-            videoView2.start();
-            videoView1.start();
+            videoView1.pause();
+            videoView2.pause();
             syncSeekBar();
         });
 
-        // Play button
-        playButton.setOnClickListener(v -> {
-            videoView1.start();
-            videoView2.start();
-        });
+        playPauseButton.setOnClickListener(v -> {
+            if (isPlaying)
+            {
+                videoView1.pause();
+                videoView2.pause();
+            }
+            else
+            {
+                videoView1.start();
+                videoView2.start();
+            }
 
-        // Pause button
-        pauseButton.setOnClickListener(v -> {
-            videoView1.pause();
-            videoView2.pause();
+            isPlaying = !isPlaying;
         });
 
         // SeekBar listener
-        seekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener()
+        seekBar.addOnChangeListener(new Slider.OnChangeListener()
         {
             @Override
-            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser)
+            public void onValueChange(@NonNull Slider slider, float value, boolean fromUser)
             {
                 if (fromUser)
                 {
-                    videoView1.seekTo(progress);
-                    videoView2.seekTo(progress);
+                    System.out.println(value);
+                    videoView1.seekTo((int) value);
+                    videoView2.seekTo((int) value);
                 }
             }
-
-            @Override
-            public void onStartTrackingTouch(SeekBar seekBar)
-            {
-            }
-
-            @Override
-            public void onStopTrackingTouch(SeekBar seekBar)
-            {
-            }
         });
+
     }
 
     private void syncSeekBar()
     {
-        seekBar.setMax(videoView1.getDuration());
+        seekBar.setValueFrom(0f);
+        seekBar.setValueTo(videoView1.getDuration());
 
         Runnable updateSeekBar = new Runnable()
         {
@@ -90,12 +110,47 @@ public class PlaybackActivity extends AppCompatActivity
             {
                 if (videoView1.isPlaying() || videoView2.isPlaying())
                 {
-                    seekBar.setProgress(videoView1.getCurrentPosition());
+                    seekBar.setValue(videoView1.getCurrentPosition());
                 }
-                handler.postDelayed(this, 500);
+                handler.postDelayed(this, 100);
             }
         };
         handler.post(updateSeekBar);
+    }
+
+    void fadeInAnimation(View view)
+    {
+        view.setAlpha(0f);
+        view.setVisibility(View.VISIBLE);
+
+        ObjectAnimator fadeIn = ObjectAnimator.ofFloat(view, "alpha", 0f, 1f);
+
+        fadeIn.start();
+
+        isUiVisible = true;
+    }
+
+    void fadeOutAnimation(View view)
+    {
+        view.setAlpha(1f);
+        view.setVisibility(View.VISIBLE);
+
+        ObjectAnimator fadeOut = ObjectAnimator.ofFloat(view, "alpha", 1f, 0f);
+
+        fadeOut.addListener(new AnimatorListenerAdapter()
+        {
+            @Override
+            public void onAnimationEnd(Animator animation)
+            {
+                super.onAnimationEnd(animation);
+
+                view.setVisibility(View.INVISIBLE);
+
+                isUiVisible = false;
+            }
+        });
+
+        fadeOut.start();
     }
 
     @Override
@@ -105,4 +160,22 @@ public class PlaybackActivity extends AppCompatActivity
         handler.removeCallbacksAndMessages(null); // Clean up handler
     }
 
+    @Override
+    public boolean onTouchEvent(MotionEvent event)
+    {
+        if (event.getAction() == MotionEvent.ACTION_UP)
+        {
+            if (!isUiVisible)
+            {
+                fadeInAnimation(seekBar);
+                fadeInAnimation(playPauseButton);
+            }
+            else
+            {
+                fadeOutAnimation(seekBar);
+                fadeOutAnimation(playPauseButton);
+            }
+        }
+        return super.onTouchEvent(event);
+    }
 }
