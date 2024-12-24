@@ -9,29 +9,10 @@ import android.app.Dialog;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.pm.PackageManager;
-import android.graphics.ImageFormat;
-import android.hardware.camera2.CameraAccessException;
-import android.hardware.camera2.CameraCaptureSession;
-import android.hardware.camera2.CameraCharacteristics;
-import android.hardware.camera2.CameraDevice;
-import android.hardware.camera2.CameraManager;
-import android.hardware.camera2.CameraMetadata;
-import android.hardware.camera2.CaptureFailure;
-import android.hardware.camera2.CaptureRequest;
-import android.hardware.camera2.TotalCaptureResult;
-import android.hardware.camera2.params.OutputConfiguration;
-import android.hardware.camera2.params.SessionConfiguration;
-import android.media.ImageReader;
 import android.net.Uri;
-import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
-import android.os.HandlerThread;
-import android.transition.Slide;
-import android.util.Log;
 import android.util.Range;
-import android.util.Size;
-import android.view.Surface;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import android.view.View;
@@ -41,7 +22,6 @@ import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.AutoCompleteTextView;
 import android.widget.Button;
-import android.widget.EditText;
 import android.widget.ImageButton;
 import android.widget.LinearLayout;
 import android.widget.TextView;
@@ -54,10 +34,8 @@ import androidx.core.app.ActivityCompat;
 
 import com.google.android.material.slider.Slider;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-
-public class MainActivity extends AppCompatActivity {
+public class MainActivity extends AppCompatActivity
+{
 
     private static final int CAMERA_REQUEST_CODE = 100;
     private static final int REQUEST_CODE_OPEN_DIRECTORY = 200;
@@ -78,11 +56,13 @@ public class MainActivity extends AppCompatActivity {
     Uri savedDirectory;
 
     @Override
-    protected void onCreate(Bundle savedInstanceState) {
+    protected void onCreate(Bundle savedInstanceState)
+    {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        if (getSupportActionBar() != null) {
+        if (getSupportActionBar() != null)
+        {
             getSupportActionBar().hide();
         }
 
@@ -92,6 +72,31 @@ public class MainActivity extends AppCompatActivity {
         pid1 = "";
         pid2 = "";
 
+        initializePreviews();
+
+        if (SettingsActivity.getExportPath(this) == null)
+        {
+            Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
+            startActivityForResult(intent, REQUEST_CODE_OPEN_DIRECTORY);
+        }
+        else
+        {
+            savedDirectory = Uri.parse(SettingsActivity.getExportPath(this));
+        }
+
+        System.out.println("Saved dir" + savedDirectory);
+
+        // Request camera permissions
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED)
+        {
+            ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.CAMERA}, CAMERA_REQUEST_CODE);
+        }
+
+        openCamera();
+    }
+
+    private void initializePreviews()
+    {
         previews = new SurfaceView[2];
 
         previews[0] = findViewById(R.id.preview1);
@@ -99,47 +104,58 @@ public class MainActivity extends AppCompatActivity {
         previews[1] = findViewById(R.id.preview2);
         SurfaceHolder holder2 = previews[1].getHolder();
 
-        holder1.addCallback(new SurfaceHolder.Callback() {
+        holder1.addCallback(new SurfaceHolder.Callback()
+        {
             @Override
-            public void surfaceCreated(@NonNull SurfaceHolder holder) {
+            public void surfaceCreated(@NonNull SurfaceHolder holder)
+            {
 
                 ++lock;
 
-                if (lock == 2) {
+                if (lock == 2)
+                {
                     lock = 0;
                     openCamera();
                 }
             }
 
             @Override
-            public void surfaceChanged(@NonNull SurfaceHolder holder, int format, int width, int height) {
+            public void surfaceChanged(@NonNull SurfaceHolder holder, int format, int width, int height)
+            {
             }
 
             @Override
-            public void surfaceDestroyed(@NonNull SurfaceHolder holder) {
+            public void surfaceDestroyed(@NonNull SurfaceHolder holder)
+            {
                 lock = 0;
                 System.out.println("surface destroyed");
                 stopCamera();
             }
 
         });
-        holder2.addCallback(new SurfaceHolder.Callback() {
+
+        holder2.addCallback(new SurfaceHolder.Callback()
+        {
             @Override
-            public void surfaceCreated(@NonNull SurfaceHolder holder) {
+            public void surfaceCreated(@NonNull SurfaceHolder holder)
+            {
 
                 ++lock;
-                if (lock == 2) {
+                if (lock == 2)
+                {
                     lock = 0;
                     openCamera();
                 }
             }
 
             @Override
-            public void surfaceChanged(@NonNull SurfaceHolder holder, int format, int width, int height) {
+            public void surfaceChanged(@NonNull SurfaceHolder holder, int format, int width, int height)
+            {
             }
 
             @Override
-            public void surfaceDestroyed(@NonNull SurfaceHolder holder) {
+            public void surfaceDestroyed(@NonNull SurfaceHolder holder)
+            {
                 lock = 0;
                 System.out.println("surface destroyed");
 
@@ -147,24 +163,12 @@ public class MainActivity extends AppCompatActivity {
             }
 
         });
-
-        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
-        startActivityForResult(intent, REQUEST_CODE_OPEN_DIRECTORY);
-
-        System.out.println(savedDirectory);
-
-
-
-        // Request camera permissions
-        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
-            ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.CAMERA}, CAMERA_REQUEST_CODE);
-        }
-
     }
 
     private void stopCamera()
     {
-        try {
+        try
+        {
             multiCam.stopPreview();
             multiCam.stopCamera();
         }
@@ -176,8 +180,10 @@ public class MainActivity extends AppCompatActivity {
 
     private void openCamera()
     {
-        try {
-            if (multiCam != null) {
+        try
+        {
+            if (multiCam != null)
+            {
                 multiCam.stopPreview();
                 multiCam.stopCamera();
             }
@@ -192,36 +198,46 @@ public class MainActivity extends AppCompatActivity {
     }
 
     @Override
-    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+    protected void onActivityResult(int requestCode, int resultCode, Intent data)
+    {
         super.onActivityResult(requestCode, resultCode, data);
-        if (requestCode == REQUEST_CODE_OPEN_DIRECTORY && resultCode == Activity.RESULT_OK) {
+        if (requestCode == REQUEST_CODE_OPEN_DIRECTORY && resultCode == Activity.RESULT_OK)
+        {
             Uri directoryUri = data.getData();
             takePersistableUriPermission(directoryUri);
-            savedDirectory = directoryUri;
-
-            openCamera();
-            System.out.println(multiCam.savedDirectory);
+            if (directoryUri != null)
+            {
+                SettingsActivity.setExportPath(this, directoryUri);
+                savedDirectory = directoryUri;
+            }
         }
     }
 
-    private void takePersistableUriPermission(Uri uri) {
+    private void takePersistableUriPermission(Uri uri)
+    {
         getContentResolver().takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
     }
 
     @Override
-    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults)
+    {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        if (requestCode == CAMERA_REQUEST_CODE) {
-            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+        if (requestCode == CAMERA_REQUEST_CODE)
+        {
+            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED)
+            {
                 // openCamera(0, 0);
                 // openCamera(1, 1);
-            } else {
+            }
+            else
+            {
                 Toast.makeText(this, "Camera permission is needed to use the camera", Toast.LENGTH_SHORT).show();
             }
         }
     }
 
-    private void showDialog(String message) {
+    private void showDialog(String message)
+    {
         // Create a TextView to display the long message
         TextView messageTextView = new TextView(this);
 
@@ -234,8 +250,10 @@ public class MainActivity extends AppCompatActivity {
         AlertDialog.Builder builder = new AlertDialog.Builder(this);
         builder.setTitle("Long Message Dialog")
                 .setView(messageTextView) // Set the custom TextView
-                .setPositiveButton("OK", new DialogInterface.OnClickListener() {
-                    public void onClick(DialogInterface dialog, int id) {
+                .setPositiveButton("OK", new DialogInterface.OnClickListener()
+                {
+                    public void onClick(DialogInterface dialog, int id)
+                    {
                         // User clicked OK button
                     }
                 });
@@ -247,10 +265,6 @@ public class MainActivity extends AppCompatActivity {
 
     public void selectCamera(View view)
     {
-        // CameraSelectDialog dialog = new CameraSelectDialog(this);
-        // dialog.show();
-
-
         Dialog dialog = new Dialog(this);
         dialog.setContentView(R.layout.camera_select_dialog);
 
@@ -263,9 +277,11 @@ public class MainActivity extends AppCompatActivity {
         ArrayAdapter<String> adapter_lid = new ArrayAdapter<>(this, android.R.layout.simple_dropdown_item_1line, MultiCam.availableCameras(this));
         lid_box.setAdapter(adapter_lid);
 
-        lid_box.setOnItemClickListener(new AdapterView.OnItemClickListener() {
+        lid_box.setOnItemClickListener(new AdapterView.OnItemClickListener()
+        {
             @Override
-            public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
+            public void onItemClick(AdapterView<?> parent, View view, int position, long id)
+            {
                 ArrayAdapter<String> adapter_pid = new ArrayAdapter<>(MainActivity.this, android.R.layout.simple_dropdown_item_1line, MultiCam.availablePhysicalIds(MainActivity.this, lid_box.getText().toString()));
                 System.out.println(lid_box.getText().toString());
                 pid_one_box.setText("", false);
@@ -284,18 +300,13 @@ public class MainActivity extends AppCompatActivity {
         pid_one_box.setAdapter(adapter_pid);
         pid_two_box.setAdapter(adapter_pid);
 
-        if (multiCam != null) {
+        if (multiCam != null)
+        {
             pid_one_box.setText(multiCam.pid1, false);
             pid_two_box.setText(multiCam.pid2, false);
         }
 
-        // Set click listener for the button
         submitButton.setOnClickListener(mview -> {
-            // String userInput = input.getText().toString();
-            // Handle user input
-            // title.setText("You entered: " + userInput);
-            // input.setText(""); // Clear the input field
-
             lid = lid_box.getText().toString();
             pid1 = pid_one_box.getText().toString();
             pid2 = pid_two_box.getText().toString();
@@ -305,7 +316,6 @@ public class MainActivity extends AppCompatActivity {
             dialog.dismiss();
         });
 
-        // Show the dialog
         dialog.show();
 
         Window window = dialog.getWindow();
@@ -331,7 +341,9 @@ public class MainActivity extends AppCompatActivity {
     public void setExposure(View view)
     {
         if (isSliderVisible)
+        {
             return;
+        }
 
         LinearLayout sliderLayout = findViewById(R.id.slider_layout);
 
@@ -342,14 +354,16 @@ public class MainActivity extends AppCompatActivity {
 
         Range<Long> exposureRange = new Range<>(0L, 1000L);
 
-        try {
+        try
+        {
             exposureRange = multiCam.getExposureRange();
         }
         catch (Exception e)
         {
             e.printStackTrace();
         }
-        try {
+        try
+        {
 
             slider.setValueFrom(exposureRange.getLower() / 100000);
             slider.setValueTo(exposureRange.getUpper() / 100000);
@@ -362,9 +376,11 @@ public class MainActivity extends AppCompatActivity {
 
         Handler handler = new Handler();
 
-        Slider.OnSliderTouchListener touchListener = new Slider.OnSliderTouchListener() {
+        Slider.OnSliderTouchListener touchListener = new Slider.OnSliderTouchListener()
+        {
             @Override
-            public void onStartTrackingTouch(Slider slider) {
+            public void onStartTrackingTouch(Slider slider)
+            {
                 // Cancel any existing callbacks
                 handler.removeCallbacks(runnable);
             }
@@ -376,18 +392,22 @@ public class MainActivity extends AppCompatActivity {
             }
         };
 
-        Slider.OnChangeListener changeListener = new Slider.OnChangeListener() {
+        Slider.OnChangeListener changeListener = new Slider.OnChangeListener()
+        {
             @Override
-            public void onValueChange(@NonNull Slider slider, float value, boolean fromUser) {
+            public void onValueChange(@NonNull Slider slider, float value, boolean fromUser)
+            {
                 handler.removeCallbacks(runnable);
                 multiCam.setExposureISO((long) value * 100000, multiCam.getIso());
                 System.out.println(multiCam.getIso());
             }
         };
 
-        runnable = new Runnable() {
+        runnable = new Runnable()
+        {
             @Override
-            public void run() {
+            public void run()
+            {
                 long value = (long) slider.getValue();
                 System.out.println("Value: " + value);
                 fadeOutAnimation(sliderLayout);
@@ -404,7 +424,6 @@ public class MainActivity extends AppCompatActivity {
         slider.addOnChangeListener(changeListener);
 
 
-
         slider.addOnSliderTouchListener(touchListener);
 
     }
@@ -412,7 +431,9 @@ public class MainActivity extends AppCompatActivity {
     public void setIso(View view)
     {
         if (isSliderVisible)
+        {
             return;
+        }
 
         LinearLayout sliderLayout = findViewById(R.id.slider_layout);
 
@@ -423,7 +444,8 @@ public class MainActivity extends AppCompatActivity {
 
         Range<Integer> isoRange = new Range<>(0, 2000);
 
-        try {
+        try
+        {
             isoRange = multiCam.getIsoRange();
         }
         catch (Exception e)
@@ -431,7 +453,8 @@ public class MainActivity extends AppCompatActivity {
             e.printStackTrace();
         }
 
-        try {
+        try
+        {
 
             slider.setValueFrom(isoRange.getLower());
             slider.setValueTo(isoRange.getUpper() - 50000);
@@ -445,18 +468,22 @@ public class MainActivity extends AppCompatActivity {
 
         Handler handler = new Handler();
 
-        Slider.OnChangeListener onChangeListener = new Slider.OnChangeListener() {
+        Slider.OnChangeListener onChangeListener = new Slider.OnChangeListener()
+        {
             @Override
-            public void onValueChange(@NonNull Slider slider, float value, boolean fromUser) {
+            public void onValueChange(@NonNull Slider slider, float value, boolean fromUser)
+            {
                 handler.removeCallbacks(runnable);
                 System.out.println(multiCam.getExposureInNanos());
                 multiCam.setExposureISO(multiCam.getExposureInNanos(), (int) value);
             }
         };
 
-        Slider.OnSliderTouchListener onSliderTouchListener = new Slider.OnSliderTouchListener() {
+        Slider.OnSliderTouchListener onSliderTouchListener = new Slider.OnSliderTouchListener()
+        {
             @Override
-            public void onStartTrackingTouch(Slider slider) {
+            public void onStartTrackingTouch(Slider slider)
+            {
                 // Cancel any existing callbacks
                 handler.removeCallbacks(runnable);
             }
@@ -469,9 +496,11 @@ public class MainActivity extends AppCompatActivity {
         };
 
 
-        runnable = new Runnable() {
+        runnable = new Runnable()
+        {
             @Override
-            public void run() {
+            public void run()
+            {
                 int value = (int) slider.getValue();
                 System.out.println("Value: " + value);
                 fadeOutAnimation(sliderLayout);
@@ -493,7 +522,9 @@ public class MainActivity extends AppCompatActivity {
     public void setFocusDistance(View view)
     {
         if (isSliderVisible)
+        {
             return;
+        }
 
         LinearLayout sliderLayout = findViewById(R.id.slider_layout);
 
@@ -503,7 +534,8 @@ public class MainActivity extends AppCompatActivity {
 
         float focusDistance = 0.0f;
 
-        try {
+        try
+        {
             focusDistance = multiCam.getFocusDistanceMin();
         }
         catch (Exception e)
@@ -517,17 +549,21 @@ public class MainActivity extends AppCompatActivity {
 
         Handler handler = new Handler();
 
-        Slider.OnChangeListener onChangeListener = new Slider.OnChangeListener() {
+        Slider.OnChangeListener onChangeListener = new Slider.OnChangeListener()
+        {
             @Override
-            public void onValueChange(@NonNull Slider slider, float value, boolean fromUser) {
+            public void onValueChange(@NonNull Slider slider, float value, boolean fromUser)
+            {
                 handler.removeCallbacks(runnable);
                 multiCam.setFocus(value);
             }
         };
 
-        Slider.OnSliderTouchListener onSliderTouchListener = new Slider.OnSliderTouchListener() {
+        Slider.OnSliderTouchListener onSliderTouchListener = new Slider.OnSliderTouchListener()
+        {
             @Override
-            public void onStartTrackingTouch(Slider slider) {
+            public void onStartTrackingTouch(Slider slider)
+            {
                 // Cancel any existing callbacks
                 handler.removeCallbacks(runnable);
             }
@@ -539,9 +575,11 @@ public class MainActivity extends AppCompatActivity {
             }
         };
 
-        runnable = new Runnable() {
+        runnable = new Runnable()
+        {
             @Override
-            public void run() {
+            public void run()
+            {
                 float value = (float) slider.getValue();
                 System.out.println("Value: " + value);
                 fadeOutAnimation(sliderLayout);
@@ -568,12 +606,14 @@ public class MainActivity extends AppCompatActivity {
         {
             multiCam.stopRecording();
         }
-        else {
+        else
+        {
             multiCam.startRecording();
         }
     }
 
-    private void hideSystemUI() {
+    private void hideSystemUI()
+    {
         View decorView = getWindow().getDecorView();
         decorView.setSystemUiVisibility(
                 View.SYSTEM_UI_FLAG_FULLSCREEN
@@ -602,9 +642,11 @@ public class MainActivity extends AppCompatActivity {
 
         ObjectAnimator fadeOut = ObjectAnimator.ofFloat(view, "alpha", 1f, 0f);
 
-        fadeOut.addListener(new AnimatorListenerAdapter() {
+        fadeOut.addListener(new AnimatorListenerAdapter()
+        {
             @Override
-            public void onAnimationEnd(Animator animation) {
+            public void onAnimationEnd(Animator animation)
+            {
                 super.onAnimationEnd(animation);
 
                 view.setVisibility(View.INVISIBLE);
@@ -614,5 +656,23 @@ public class MainActivity extends AppCompatActivity {
         });
 
         fadeOut.start();
+    }
+
+    public void openPlaybackActivity(View view)
+    {
+        Intent intent = new Intent(this, PlaybackActivity.class);
+        startActivity(intent);
+    }
+
+    public void openVideosActivity(View view)
+    {
+        Intent intent = new Intent(this, VideosActivity.class);
+        startActivity(intent);
+    }
+
+    public void openSettingsActivity(View view)
+    {
+        Intent intent = new Intent(this, SettingsActivity.class);
+        startActivity(intent);
     }
 }
