@@ -224,7 +224,7 @@ public class MultiCam
     {
         try
         {
-            captureRequestBuilder = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
+            captureRequestBuilder = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_RECORD);
 
 //            captureRequestBuilder = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
 //            captureRequestBuilder.addTarget(s1.getHolder().getSurface());
@@ -543,7 +543,6 @@ public class MultiCam
 
         System.out.println("size " + size.getHeight());
 
-        recorder_1.setAudioSource(MediaRecorder.AudioSource.MIC);
         recorder_1.setVideoSource(MediaRecorder.VideoSource.SURFACE);
         recorder_1.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4);
         recorder_1.setOutputFile(output1);
@@ -551,7 +550,6 @@ public class MultiCam
         recorder_1.setVideoFrameRate(30);
         recorder_1.setVideoSize(640, 480);
         recorder_1.setVideoEncoder(MediaRecorder.VideoEncoder.H264);
-        recorder_1.setAudioEncoder(MediaRecorder.AudioEncoder.AAC);
         Toast.makeText(context, "Recording Started", Toast.LENGTH_SHORT).show();
         recorder_1.prepare();
 
@@ -565,7 +563,7 @@ public class MultiCam
 
             recorder_2 = new MediaRecorder();
 
-            recorder_2.setAudioSource(MediaRecorder.AudioSource.MIC);
+//            recorder_2.setAudioSource(MediaRecorder.AudioSource.MIC);
             recorder_2.setVideoSource(MediaRecorder.VideoSource.SURFACE);
             recorder_2.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4);
             recorder_2.setOutputFile(output1);
@@ -573,7 +571,7 @@ public class MultiCam
             recorder_2.setVideoFrameRate(30);
             recorder_2.setVideoSize(size.getWidth(), size.getHeight());
             recorder_2.setVideoEncoder(MediaRecorder.VideoEncoder.H264);
-            recorder_2.setAudioEncoder(MediaRecorder.AudioEncoder.AAC);
+//            recorder_2.setAudioEncoder(MediaRecorder.AudioEncoder.AAC);
             recorder_2.prepare();
 
             System.out.println("mediarecorder 2 ready");
@@ -598,6 +596,7 @@ public class MultiCam
             Toast.makeText(context, "Recording Started", Toast.LENGTH_SHORT);
 
             captureRequestBuilder = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_RECORD);
+            captureRequestBuilder.set(CaptureRequest.CONTROL_MODE, CameraMetadata.CONTROL_MODE_AUTO);
 
             captureRequestBuilder.addTarget(s1.getHolder().getSurface());
             captureRequestBuilder.addTarget(s2.getHolder().getSurface());

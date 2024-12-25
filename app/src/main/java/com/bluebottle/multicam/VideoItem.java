@@ -15,9 +15,9 @@ public class VideoItem
         this.path_one = path_one;
         this.path_two = path_two;
 
-        lid = "LID :\t\t";
-        pid1 = "PID :\t\t";
-        pid2 = "PID :\t\t";
+        lid = "LID\t\t :\t\t";
+        pid1 = "PID_1 :\t";
+        pid2 = "PID_2 :\t";
 
         String regex = "^(VID_\\d{8}_\\d{6})_(\\d*)_(\\d*)\\.mp4$";
         Pattern pattern = Pattern.compile(regex);

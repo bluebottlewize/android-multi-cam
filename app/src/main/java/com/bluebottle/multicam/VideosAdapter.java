@@ -3,14 +3,21 @@ package com.bluebottle.multicam;
 import android.content.Context;
 import android.content.Intent;
 import android.view.LayoutInflater;
+import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.ImageButton;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.annotation.NonNull;
+import androidx.appcompat.widget.PopupMenu;
 import androidx.recyclerview.widget.RecyclerView;
 
+import java.io.File;
 import java.util.List;
+
+import org.apache.commons.io.FileUtils;
 
 public class VideosAdapter extends RecyclerView.Adapter<VideosAdapter.ViewHolder>
 {
@@ -27,6 +34,7 @@ public class VideosAdapter extends RecyclerView.Adapter<VideosAdapter.ViewHolder
     public static class ViewHolder extends RecyclerView.ViewHolder
     {
         TextView nameBox, lidBox, cameraOneBox, cameraTwoBox;
+        ImageButton optionButton;
 
         public ViewHolder(@NonNull View itemView)
         {
@@ -35,6 +43,7 @@ public class VideosAdapter extends RecyclerView.Adapter<VideosAdapter.ViewHolder
             lidBox = itemView.findViewById(R.id.lid_box);
             cameraOneBox = itemView.findViewById(R.id.camera_one_box);
             cameraTwoBox = itemView.findViewById(R.id.camera_two_box);
+            optionButton = itemView.findViewById(R.id.video_options_button);
         }
     }
 
@@ -64,6 +73,59 @@ public class VideosAdapter extends RecyclerView.Adapter<VideosAdapter.ViewHolder
                 Intent intent = new Intent(context, PlaybackActivity.class);
                 intent.putExtra("video_id", item.name);
                 context.startActivity(intent);
+            }
+        });
+
+        holder.optionButton.setOnClickListener(new View.OnClickListener()
+        {
+            @Override
+            public void onClick(View view)
+            {
+                PopupMenu popupMenu = new PopupMenu(context, view);
+                popupMenu.getMenuInflater().inflate(R.menu.video_options, popupMenu.getMenu());
+
+                // Set a listener for menu item clicks
+                popupMenu.setOnMenuItemClickListener(new PopupMenu.OnMenuItemClickListener()
+                {
+                    @Override
+                    public boolean onMenuItemClick(MenuItem menuItem)
+                    {
+                        if (menuItem.getItemId() == R.id.delete_video_option)
+                        {
+                            if (position != RecyclerView.NO_POSITION)
+                            {
+                                try {
+                                    File dir = new File(context.getFilesDir(), "videos/" + item.name);
+                                    FileUtils.deleteDirectory(dir);
+                                    Toast.makeText(context, "Deleted Successfully", Toast.LENGTH_SHORT).show();
+                                }
+                                catch (Exception e)
+                                {
+                                    e.printStackTrace();
+                                }
+
+                                itemList.remove(position);
+                                notifyItemRemoved(position);
+                                notifyItemRangeChanged(position, itemList.size());
+                            }
+
+                            return true;
+                        }
+                        else if (menuItem.getItemId() == R.id.export_video_option)
+                        {
+                            return true;
+                        }
+                        else
+                        {
+                            // Default case
+                            return false;
+                        }
+                    }
+                });
+
+                // Show the menu
+                popupMenu.show();
+
             }
         });
     }
