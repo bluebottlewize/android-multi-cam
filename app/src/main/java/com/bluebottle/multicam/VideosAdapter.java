@@ -2,6 +2,7 @@ package com.bluebottle.multicam;
 
 import android.content.Context;
 import android.content.Intent;
+import android.net.Uri;
 import android.view.LayoutInflater;
 import android.view.MenuItem;
 import android.view.View;
@@ -12,12 +13,15 @@ import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.widget.PopupMenu;
+import androidx.documentfile.provider.DocumentFile;
 import androidx.recyclerview.widget.RecyclerView;
 
-import java.io.File;
-import java.util.List;
-
 import org.apache.commons.io.FileUtils;
+
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.OutputStream;
+import java.util.List;
 
 public class VideosAdapter extends RecyclerView.Adapter<VideosAdapter.ViewHolder>
 {
@@ -94,7 +98,8 @@ public class VideosAdapter extends RecyclerView.Adapter<VideosAdapter.ViewHolder
                         {
                             if (position != RecyclerView.NO_POSITION)
                             {
-                                try {
+                                try
+                                {
                                     File dir = new File(context.getFilesDir(), "videos/" + item.name);
                                     FileUtils.deleteDirectory(dir);
                                     Toast.makeText(context, "Deleted Successfully", Toast.LENGTH_SHORT).show();
@@ -113,6 +118,45 @@ public class VideosAdapter extends RecyclerView.Adapter<VideosAdapter.ViewHolder
                         }
                         else if (menuItem.getItemId() == R.id.export_video_option)
                         {
+                            String exportPath = SettingsActivity.getExportPath(context);
+                            DocumentFile savedFolder = DocumentFile.fromTreeUri(context, Uri.parse(exportPath));
+
+                            FileInputStream inputStream = null;
+                            OutputStream outputStream = null;
+
+                            try
+                            {
+                                DocumentFile destFolder = savedFolder.createDirectory(item.name);
+
+                                File srcFolder = new File(context.getFilesDir(), "videos/" + item.name);
+
+                                for (File file : srcFolder.listFiles())
+                                {
+                                    DocumentFile outputFile = destFolder.createFile("video/mp4", file.getName());
+
+                                    try
+                                    {
+                                        outputStream = context.getContentResolver().openOutputStream(outputFile.getUri());
+
+                                        FileUtils.copyFile(file, outputStream);
+
+                                        inputStream.close();
+                                        outputStream.close();
+                                    }
+                                    catch (Exception e)
+                                    {
+                                        e.printStackTrace();
+                                    }
+                                }
+
+                                inputStream.close();
+                                outputStream.close();
+                            }
+                            catch (Exception e)
+                            {
+                                e.printStackTrace();
+                            }
+
                             return true;
                         }
                         else

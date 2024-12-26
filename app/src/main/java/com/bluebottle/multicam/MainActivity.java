@@ -455,13 +455,13 @@ public class MainActivity extends AppCompatActivity
 
         try
         {
-
             slider.setValueFrom(isoRange.getLower());
-            slider.setValueTo(isoRange.getUpper() - 50000);
+            slider.setValueTo(isoRange.getUpper());
             slider.setValue(multiCam.getIso());
         }
         catch (Exception e)
         {
+            slider.setValueFrom(0.0f);
             slider.setValueTo(multiCam.getIso() + 3000);
             slider.setValue(multiCam.getIso());
         }
@@ -545,7 +545,15 @@ public class MainActivity extends AppCompatActivity
 
         slider.setValueFrom(0.0f);
         slider.setValueTo(focusDistance);
-        slider.setValue(multiCam.getFocusDistance());
+
+        try
+        {
+            slider.setValue(multiCam.getFocusDistance());
+        }
+        catch (Exception e)
+        {
+            e.printStackTrace();
+        }
 
         Handler handler = new Handler();
 
